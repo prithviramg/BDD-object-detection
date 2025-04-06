@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
+"""
+Copyright (C) 2025.
+Python script for Berkeley DeepDrive Dataset Examination
+Date: 26th March 2025
+Authors:
+- Gauresh Shirodkar (Modified by Gemini)
+"""
+
+# Standard imports
 import os
 import json
 from collections import defaultdict
+
+# Third party imports
 import dash
 import numpy as np
-import pandas as pd
 from dash import dcc, html
 import plotly.express as px
 from dash.dependencies import Input, Output
 from plotly.subplots import make_subplots
+import pandas as pd
 from dash import dash_table
-import plotly.graph_objects as go
 
 
 class DataAnalyzerBDD:
@@ -18,7 +28,7 @@ class DataAnalyzerBDD:
     A class to analyze the Berkeley DeepDrive (BDD) dataset.
     """
 
-    def __init__(self, training_set_path: str, validation_set_path: str):
+    def __init__(self, training_set_path, validation_set_path):
         """
         Initializes the DataAnalyzerBDD with paths to the training and validation label files.
 
@@ -45,7 +55,7 @@ class DataAnalyzerBDD:
             self.validation_item_dimensions,
         ) = self._process_annotations(self.validation_data)
 
-    def _load_annotation_file(self, file_path: str) -> list:
+    def _load_annotation_file(self, file_path):
         """
         Loads the JSON annotation file from the given path.
 
@@ -62,7 +72,7 @@ class DataAnalyzerBDD:
             print(f"Error encountered while loading the file at {file_path}")
             return []
 
-    def _examine_dataset(self, annotation_list: list) -> tuple:
+    def _examine_dataset(self, annotation_list):
         """
         Analyzes the dataset to extract information about categories, weather conditions,
         time of day, and object resolutions.
@@ -82,8 +92,7 @@ class DataAnalyzerBDD:
 
         for record in annotation_list:
             for label_info in record.get("labels", []):
-                if label_info["category"] not in ["drivable area", "lane"]:
-                    object_categories[label_info["category"]] += 1
+                object_categories[label_info["category"]] += 1
 
             sky_conditions[record.get("attributes", {}).get("weather", "unknown")] += 1
             daytime[record.get("attributes", {}).get("timeofday", "unknown")] += 1
@@ -109,9 +118,9 @@ class DataAnalyzerBDD:
 
         return object_categories, sky_conditions, daytime, image_resolutions
 
-    def _process_annotations(self, annotation_list: list) -> tuple:
+    def _process_annotations(self, annotation_list):
         """
-        Processes the annotation data to count objects, their sizes, and their positions.
+        Processes the annotation data to count objects, their sizes, and their positions, and dimensions.
 
         Args:
             annotation_list (list): A list of annotation dictionaries.
@@ -144,16 +153,8 @@ class DataAnalyzerBDD:
                     item_wh[item_class]["height"].append(height_box)
         return item_occurrences, item_dimensions, item_placements, item_wh
 
-    def _calculate_percentiles(self, data: np.ndarray) -> dict:
-        """
-        Calculates specified percentiles for a list of numerical data.
-
-        Args:
-            data (np.ndarray): data array for calculating percentile
-
-        Returns:
-            dict: 1, 10, 25, 50, 75, 90, 99 percentile values
-        """
+    def _calculate_percentiles(self, data):
+        """Calculates specified percentiles for a list of numerical data."""
         if not data:
             return {}
         return {
@@ -198,9 +199,10 @@ def main_analysis():
                     dcc.Graph(id="timeofday-pie-chart", style={"width": "50%"}),
                 ],
             ),
-            html.Div(id="object-dimensions-tables"),
+            dcc.Graph(id="item-frequency-plot"),
             dcc.Graph(id="item-size-plot"),
             dcc.Graph(id="item-spatial-distribution"),
+            html.Div(id="object-dimensions-tables"),  # Placeholder for the tables
         ]
     )
 
@@ -209,25 +211,17 @@ def main_analysis():
             Output("object-category-distribution", "figure"),
             Output("weather-pie-chart", "figure"),
             Output("timeofday-pie-chart", "figure"),
-            Output("object-dimensions-tables", "children"),
+            Output("item-frequency-plot", "figure"),
             Output("item-size-plot", "figure"),
             Output("item-spatial-distribution", "figure"),
-        ],
+            Output("object-dimensions-tables", "children"),
+        ],  # New output for tables
         [Input("dataset-selector", "value")],
     )
     def update_visualizations(selected_data_set):
-        """
-        Callback function to update the graphs based on the selected dataset.
-
-        Args:
-            selected_data_set (str): The selected dataset ('train' or 'val').
-
-        Returns:
-            tuple: A tuple of Plotly figures for each graph.
-        """
         if selected_data_set == "train":
             analysis_results = data_examiner.training_insights
-            item_counts, item_sizes, item_locations, items_wh = (
+            item_counts, item_sizes, item_locations, item_wh = (
                 data_examiner.training_item_counts,
                 data_examiner.training_item_sizes,
                 data_examiner.training_item_locations,
@@ -235,7 +229,7 @@ def main_analysis():
             )
         else:
             analysis_results = data_examiner.validation_insights
-            item_counts, item_sizes, item_locations, items_wh = (
+            item_counts, item_sizes, item_locations, item_wh = (
                 data_examiner.validation_item_counts,
                 data_examiner.validation_item_sizes,
                 data_examiner.validation_item_locations,
@@ -244,10 +238,10 @@ def main_analysis():
 
         object_categories, sky_conditions, daytime, image_resolutions = analysis_results
 
-        treemap_figure = px.treemap(
-            names=list(object_categories.keys()),
-            values=list(object_categories.values()),
-            path=[list(object_categories.keys())],
+        category_figure = px.bar(
+            x=list(object_categories.keys()),
+            y=list(object_categories.values()),
+            labels={"x": "Object Category", "y": "Number of Instances"},
             title="Distribution of Object Categories",
             color_discrete_sequence=px.colors.qualitative.Prism,
         )
@@ -266,81 +260,38 @@ def main_analysis():
             color_discrete_sequence=px.colors.qualitative.Pastel1,
         )
 
-        width_data = {
-            "Statistic": [
-                "Median",
-                "1st Percentile",
-                "10th Percentile",
-                "25th Percentile",
-                "75th Percentile",
-                "90th Percentile",
-                "99th Percentile",
-            ]
-        }
-        height_data = {
-            "Statistic": [
-                "Median",
-                "1st Percentile",
-                "10th Percentile",
-                "25th Percentile",
-                "75th Percentile",
-                "90th Percentile",
-                "99th Percentile",
-            ]
-        }
-
-        for category, dimensions in items_wh.items():
-            width_stats = data_examiner._calculate_percentiles(dimensions["width"])
-            height_stats = data_examiner._calculate_percentiles(dimensions["height"])
-
-            width_data[category] = [
-                round(width_stats.get(stat, 0), 2) for stat in width_data["Statistic"]
-            ]
-            height_data[category] = [
-                round(height_stats.get(stat, 0), 2) for stat in height_data["Statistic"]
-            ]
-
-        width_table = dash_table.DataTable(
-            id="width-table-all-categories",
-            columns=[{"name": i, "id": i} for i in width_data.keys()],
-            data=[dict(zip(width_data.keys(), v)) for v in zip(*width_data.values())],
-        )
-
-        height_table = dash_table.DataTable(
-            id="height-table-all-categories",
-            columns=[{"name": i, "id": i} for i in height_data.keys()],
-            data=[dict(zip(height_data.keys(), v)) for v in zip(*height_data.values())],
+        frequency_figure = px.bar(
+            x=list(item_counts.keys()),
+            y=list(item_counts.values()),
+            labels={"x": "Detected Object", "y": "Frequency"},
+            title="Frequency of Detected Objects",
+            color_discrete_sequence=px.colors.qualitative.Dark2,
         )
 
         size_df = pd.DataFrame(
             [(k, v) for k, sizes_list in item_sizes.items() for v in sizes_list],
             columns=["Object Class", "Size"],
         )
-        size_figure = px.violin(
+        boxplot_figure = px.box(
             size_df,
             x="Object Class",
             y="Size",
-            title="Distribution of Object Sizes (log scale)",
+            title="Distribution of Object Sizes (Log Scale)",
             color_discrete_sequence=px.colors.qualitative.Alphabet,
             log_y=True,
-            range_y=[1, 1_000_000],
         )
-
-        unique_objects = sorted(item_locations.keys())
-        num_objects = len(unique_objects)
-        rows = min(5, (num_objects + 1) // 2)
-        cols = min(2, num_objects) if num_objects > 1 else 1
-        subplot_titles_spatial = [
-            f"Spatial Distribution of {obj}" for obj in unique_objects
-        ]
 
         spatial_figure = make_subplots(
-            rows=rows, cols=cols, subplot_titles=subplot_titles_spatial
+            rows=min(5, (len(item_locations) + 1) // 2),
+            cols=min(2, len(item_locations) if len(item_locations) > 1 else 1),
+            subplot_titles=[
+                f"Spatial Distribution of {obj}"
+                for obj in sorted(item_locations.keys())
+            ],
         )
-
         row_num, col_num = 1, 1
         color_palette = px.colors.qualitative.Vivid
-        for i, obj_class in enumerate(unique_objects):
+        for i, obj_class in enumerate(sorted(item_locations.keys())):
             positions = item_locations[obj_class]
             if positions:
                 x_coords, y_coords = zip(*positions)
@@ -350,7 +301,7 @@ def main_analysis():
                         y=y_coords,
                         color_discrete_sequence=[color_palette[i % len(color_palette)]],
                         labels={"x": "X-Coordinate", "y": "Y-Coordinate"},
-                        title=f"Spatial Distribution of {obj_class}",
+                        showlegend=False,
                     ).data[0],
                     row=row_num,
                     col=col_num,
@@ -361,41 +312,75 @@ def main_analysis():
                         x=[],
                         y=[],
                         labels={"x": "X-Coordinate", "y": "Y-Coordinate"},
-                        title=f"Spatial Distribution of {obj_class}",
+                        showlegend=False,
                     ).data[0],
                     row=row_num,
                     col=col_num,
                 )
-
-            if col_num < cols:
+            if col_num < 2:
                 col_num += 1
             else:
                 row_num += 1
                 col_num = 1
-
-            if row_num > rows:
+            if row_num > 5:
                 break
 
         spatial_figure.update_layout(
             title_text="Spatial Distribution of Detected Objects",
-            height=2000,
-            yaxis={"autorange": "reversed"},
+            height=1000,
+            yaxis={"range": [750, 0]},
+            grid={
+                "rows": min(5, (len(item_locations) + 1) // 2),
+                "columns": min(
+                    2, len(item_locations) if len(item_locations) > 1 else 1
+                ),
+                "vertical_spacing": 0.1,
+                "horizontal_spacing": 0.05,
+            },
         )
 
+        tables = []
+        for category, dimensions in item_wh.items():
+            width_stats = data_examiner._calculate_percentiles(dimensions["width"])
+            height_stats = data_examiner._calculate_percentiles(dimensions["height"])
+
+            width_table = dash_table.DataTable(
+                id=f"width-table-{category}",
+                columns=[
+                    {"name": "Statistic", "id": "Statistic"},
+                    {"name": "Value", "id": "Value"},
+                ],
+                data=[{"Statistic": k, "Value": v} for k, v in width_stats.items()],
+                title=f"Width Statistics - {category}",
+            )
+            height_table = dash_table.DataTable(
+                id=f"height-table-{category}",
+                columns=[
+                    {"name": "Statistic", "id": "Statistic"},
+                    {"name": "Value", "id": "Value"},
+                ],
+                data=[{"Statistic": k, "Value": v} for k, v in height_stats.items()],
+                title=f"Height Statistics - {category}",
+            )
+            tables.extend(
+                [
+                    html.H3(f"Category: {category}"),
+                    html.H4("Width Statistics"),
+                    width_table,
+                    html.H4("Height Statistics"),
+                    height_table,
+                    html.Hr(),
+                ]
+            )
+
         return (
-            treemap_figure,
+            category_figure,
             weather_figure,
             timeofday_figure,
-            html.Div(
-                [
-                    html.H3("Object Width Statistics"),
-                    width_table,
-                    html.H3("Object Height Statistics"),
-                    height_table,
-                ]
-            ),
-            size_figure,
+            frequency_figure,
+            boxplot_figure,
             spatial_figure,
+            tables,
         )
 
     app.run(debug=True, port=8050)
@@ -403,3 +388,8 @@ def main_analysis():
 
 if __name__ == "__main__":
     main_analysis()
+
+"""
+docker run --rm -p 8050:8050 -v "C:\Personal\Bosch_assignment\:/data" -e TRAIN_LABELS_PATH=/data/assignment_data_bdd_files/bdd100k_labels_release/bdd100k/labels/bdd100k_labels_images_train.json -e VAL_LABELS_PATH=/data/assignment_data_bdd_files/bdd100k_labels_release/bdd100k/labels/bdd100k_labels_images_val.json python-data-container
+
+"""
