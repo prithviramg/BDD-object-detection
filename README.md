@@ -6,42 +6,6 @@ This repository demonstrates an end-to-end object detection pipeline using a pre
 
 To detect common objects (based on COCO dataset classes) in input images using a pre-trained deep learning model.
 
-## Repository Structure
-your-object-detection-repo/
-│
-├── data/                 # Data files (ignored by git by default)
-│   ├── raw/              # Input images (place your .jpg/.png here)
-│   └── processed/        # Images after the 'data processing' step
-│
-├── notebooks/            # Jupyter notebooks for exploration
-│   └── 1_eda_and_prototyping.ipynb # EDA and inference demo
-│
-├── src/                  # Source code for reusable functions/classes
-│   ├── init.py
-│   ├── data_processing.py # Image validation/copying logic
-│   ├── model_pipeline.py  # Model loading and inference logic
-│   ├── evaluation.py      # Structuring results and basic metrics
-│   └── utils.py           # Helpers (drawing boxes, COCO labels, save/load)
-│
-├── scripts/              # Executable scripts orchestrating tasks
-│   ├── process_data.py   # Runs the data processing task
-│   ├── train_model.py    # Loads and saves the pre-trained model
-│   ├── evaluate_model.py # Runs inference and evaluation
-│
-├── deployment/           # Deployment artifacts
-│   └── data_task/
-│       ├── Dockerfile      # Dockerfile for the data processing task
-│
-├── results/              # Output files (ignored by git by default)
-│   ├── model/            # Saved model file(s) (.pth)
-│   ├── plots/            # Output images with bounding boxes
-│   └── metrics/          # JSON files with detection results/summary
-│
-├── tests/                # Unit tests (optional, structure provided)
-│
-├── .gitignore            # Git ignore file
-├── requirements.txt      # Python dependencies
-└── README.md             # This documentation file
 ## Setup & Installation
 
 **Prerequisites:**
