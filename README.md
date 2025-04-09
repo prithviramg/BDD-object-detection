@@ -123,6 +123,9 @@ Model performance is evaluated both quantitatively and qualitatively:
 - **Size Error:** Average difference in predicted vs actual bounding box dimensions.
 
 ![evaluation](samples/evaluation.png)
+![evaluation1](plots/F1_TimeOfDay.png)
+![evaluation2](plots/AR_TimeOfDay.png)
+![evaluation3](plots/AR_Weather.png)
 
 ### Qualitative Metrics:
 - **Visual Inference Outputs:** Saved to `data/` with bounding boxes and class labels overlaid on input images.
@@ -132,7 +135,7 @@ Model performance is evaluated both quantitatively and qualitatively:
 
 Images below demonstrate detection results on the BDD dataset using the trained model:
 
-![sample_0](samples/sample0.png)
-![sample_1](samples/sample1.png)
-![sample_2](samples/sample2.png)
+![sample_0](samples/Figure_1.png)
+![sample_1](samples/Figure_2.png)
+![sample_2](samples/Figure_3.png)
 
