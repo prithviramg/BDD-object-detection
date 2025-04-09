@@ -97,6 +97,8 @@ class DataAnalyzerBDD:
                     "bike",
                     "car",
                     "rider",
+                    "motor",
+                    "train",
                     "traffic sign",
                 ]:
                     box = obj_data.get("box2d", {})
