@@ -10,16 +10,27 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 # Define your class mappings
-tc_classes = {'traffic light': 0, 'traffic sign': 1}
-tp_classes = {'person': 0, 'rider': 1, 'car': 2, 'truck': 3, 'bus': 4, 'train': 5, 'motor': 6, 'bike': 7}
+tc_classes = {"traffic light": 0, "traffic sign": 1}
+tp_classes = {
+    "person": 0,
+    "rider": 1,
+    "car": 2,
+    "truck": 3,
+    "bus": 4,
+    "train": 5,
+    "motor": 6,
+    "bike": 7,
+}
+
 
 def gaussian2D(shape, sigma=1):
     """Generate a 2D gaussian kernel."""
-    m, n = [(ss - 1.) / 2. for ss in shape]
-    y, x = np.ogrid[-m:m + 1, -n:n + 1]
+    m, n = [(ss - 1.0) / 2.0 for ss in shape]
+    y, x = np.ogrid[-m : m + 1, -n : n + 1]
     h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
     h[h < np.finfo(h.dtype).eps * h.max()] = 0
     return h
+
 
 def draw_gaussian(heatmap, center, radius, k=1):
     """Draw a 2D gaussian on the heatmap."""
@@ -34,10 +45,13 @@ def draw_gaussian(heatmap, center, radius, k=1):
     top = min(y, radius)
     bottom = min(height - y, radius + 1)
 
-    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+    masked_heatmap = heatmap[y - top : y + bottom, x - left : x + right]
+    masked_gaussian = gaussian[
+        radius - top : radius + bottom, radius - left : radius + right
+    ]
     if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:
         np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
+
 
 def gaussian_radius(det_size, min_overlap=0.7):
     """Compute gaussian radius for an object of size det_size."""
@@ -46,22 +60,23 @@ def gaussian_radius(det_size, min_overlap=0.7):
     a1 = 1
     b1 = height + width
     c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
-    sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
+    sq1 = np.sqrt(b1**2 - 4 * a1 * c1)
     r1 = (b1 + sq1) / 2
 
     a2 = 4
     b2 = 2 * (height + width)
     c2 = (1 - min_overlap) * width * height
-    sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
+    sq2 = np.sqrt(b2**2 - 4 * a2 * c2)
     r2 = (b2 + sq2) / 2
 
     a3 = 4 * min_overlap
     b3 = -2 * min_overlap * (height + width)
     c3 = (min_overlap - 1) * width * height
-    sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
+    sq3 = np.sqrt(b3**2 - 4 * a3 * c3)
     r3 = (b3 + sq3) / 2
 
     return int(min(r1, r2, r3))
+
 
 class BDDDataset(Dataset):
     def __init__(self, image_dir, annotation_file, input_size=(512, 512), max_objs=128):
@@ -78,26 +93,31 @@ class BDDDataset(Dataset):
         # For TC (traffic control objects: traffic light and sign)
         self.tc_classes = tc_classes
         self.num_tc = len(tc_classes)
-        self.down_ratio_tc = 2  # Use P3: feature map with resolution input_size/2
-        self.output_size_tc = (self.input_size[0] // self.down_ratio_tc, 
-                               self.input_size[1] // self.down_ratio_tc)
+        self.down_ratio_tc = 4  # Use P3: feature map with resolution input_size/2
+        self.output_size_tc = (
+            self.input_size[0] // self.down_ratio_tc,
+            self.input_size[1] // self.down_ratio_tc,
+        )
 
         # For TP (traffic participant objects)
         self.tp_classes = tp_classes
         self.num_tp = len(tp_classes)
-        self.down_ratio_tp = 4  # Use P4: feature map with resolution input_size/4
-        self.output_size_tp = (self.input_size[0] // self.down_ratio_tp, 
-                               self.input_size[1] // self.down_ratio_tp)
+        self.down_ratio_tp = 8  # Use P4: feature map with resolution input_size/4
+        self.output_size_tp = (
+            self.input_size[0] // self.down_ratio_tp,
+            self.input_size[1] // self.down_ratio_tp,
+        )
 
-        # Load annotations. Assumes JSON file contains a list of dict entries.
-        with open(annotation_file, 'r') as f:
+        with open(annotation_file, "r") as f:
             self.annotations = json.load(f)
 
         # Basic transforms: resize image and convert to tensor.
-        self.img_transform = transforms.Compose([
-            transforms.Resize(self.input_size, interpolation=Image.BILINEAR),
-            transforms.ToTensor(),
-        ])
+        self.img_transform = transforms.Compose(
+            [
+                transforms.Resize(self.input_size, interpolation=Image.BILINEAR),
+                transforms.ToTensor(),
+            ]
+        )
 
     def __len__(self):
         return len(self.annotations)
@@ -105,7 +125,7 @@ class BDDDataset(Dataset):
     def __getitem__(self, index):
         # Each annotation entry should have 'name' and 'labels'
         ann = self.annotations[index]
-        img_path = os.path.join(self.image_dir, ann['name'])
+        img_path = os.path.join(self.image_dir, ann["name"])
         img = Image.open(img_path).convert("RGB")
         orig_w, orig_h = img.size
 
@@ -116,7 +136,7 @@ class BDDDataset(Dataset):
         scale_x = self.input_size[1] / orig_w
         scale_y = self.input_size[0] / orig_h
 
-        # Prepare target arrays for TC branch (P3: input_size/2)
+        # Prepare target arrays for TC branch (P3: input_size/4), since we have small objects
         H_tc, W_tc = self.output_size_tc
         tc_heatmap = np.zeros((self.num_tc, H_tc, W_tc), dtype=np.float32)
         tc_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
@@ -125,7 +145,7 @@ class BDDDataset(Dataset):
         tc_ind = np.zeros((self.max_objs), dtype=np.int64)
         tc_count = 0
 
-        # Prepare target arrays for TP branch (P4: input_size/4)
+        # Prepare target arrays for TP branch (P4: input_size/8), since we have large objects
         H_tp, W_tp = self.output_size_tp
         tp_heatmap = np.zeros((self.num_tp, H_tp, W_tp), dtype=np.float32)
         tp_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
@@ -134,16 +154,13 @@ class BDDDataset(Dataset):
         tp_ind = np.zeros((self.max_objs), dtype=np.int64)
         tp_count = 0
 
-        # Process each object in the annotation.
-        for obj in ann['labels']:
-            # For BDD, expect each object to have 'category' and 'box2d' with x1,y1,x2,y2.
-            category = obj['category']
-            if 'box2d' not in obj:
-                continue  # Skip if no bounding box.
-            box = obj['box2d']
-            x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
+        for obj in ann["labels"]:
+            category = obj["category"]
+            if "box2d" not in obj:
+                continue
+            box = obj["box2d"]
+            x1, y1, x2, y2 = box["x1"], box["y1"], box["x2"], box["y2"]
 
-            # Scale box coordinates to the resized image
             x1 *= scale_x
             y1 *= scale_y
             x2 *= scale_x
@@ -153,7 +170,6 @@ class BDDDataset(Dataset):
             if w_box <= 0 or h_box <= 0:
                 continue
 
-            # Process traffic control objects (TC: traffic light & sign) using down_ratio_tc
             if category in self.tc_classes:
                 factor = self.down_ratio_tc
                 out_W, out_H = W_tc, H_tc
@@ -169,7 +185,7 @@ class BDDDataset(Dataset):
                 h_feat = (h_box / factor) / H_tc
                 radius = gaussian_radius((math.ceil(h_feat), math.ceil(w_feat)))
                 radius = max(0, int(radius))
-                
+
                 cls_id = self.tc_classes[category]
                 draw_gaussian(tc_heatmap[cls_id], ct_int, radius)
                 if tc_count < self.max_objs:
@@ -193,7 +209,7 @@ class BDDDataset(Dataset):
                 h_feat = (h_box / factor) / H_tp
                 radius = gaussian_radius((math.ceil(h_feat), math.ceil(w_feat)))
                 radius = max(0, int(radius))
-                
+
                 cls_id = self.tp_classes[category]
                 draw_gaussian(tp_heatmap[cls_id], ct_int, radius)
                 if tp_count < self.max_objs:
@@ -218,9 +234,10 @@ class BDDDataset(Dataset):
                 "reg": torch.tensor(tp_reg),
                 "reg_mask": torch.tensor(tp_reg_mask, dtype=torch.uint8),
                 "ind": torch.tensor(tp_ind, dtype=torch.long),
-            }
+            },
         }
         return {"image": img, "targets": targets}
+
 
 def collate_fn(batch):
     """
@@ -234,40 +251,52 @@ def collate_fn(batch):
                    "reg_mask": [max_objs], "ind": [max_objs] }
     This function stacks images and each target component in the batch.
     """
-    images = [sample['image'] for sample in batch]
+    images = [sample["image"] for sample in batch]
     images = torch.stack(images, dim=0)
-    
+
     # For targets, we need to combine each sub-key from "tc" and "tp" separately.
     def stack_targets(key):
         return torch.stack([sample["targets"][key] for sample in batch], dim=0)
-    
+
     targets = {}
     # For traffic control (TC) branch
     targets["tc"] = {}
     for sub_key in batch[0]["targets"]["tc"]:
-        targets["tc"][sub_key] = stack_targets(lambda sample= None, key=sub_key: sample["targets"]["tc"][key]) if False else \
-                                   torch.stack([sample["targets"]["tc"][sub_key] for sample in batch], dim=0)
+        targets["tc"][sub_key] = (
+            stack_targets(lambda sample=None, key=sub_key: sample["targets"]["tc"][key])
+            if False
+            else torch.stack(
+                [sample["targets"]["tc"][sub_key] for sample in batch], dim=0
+            )
+        )
     # For traffic participant (TP) branch
     targets["tp"] = {}
     for sub_key in batch[0]["targets"]["tp"]:
-        targets["tp"][sub_key] = torch.stack([sample["targets"]["tp"][sub_key] for sample in batch], dim=0)
+        targets["tp"][sub_key] = torch.stack(
+            [sample["targets"]["tp"][sub_key] for sample in batch], dim=0
+        )
 
     return images, targets
 
+
 if __name__ == "__main__":
     # Set your dataset paths accordingly.
-    image_directory = r"D:\database\bdd_dataset\bdd100k_images_100k\bdd100k\images\100k\train"
+    image_directory = (
+        r"D:\database\bdd_dataset\bdd100k_images_100k\bdd100k\images\100k\train"
+    )
     annotation_file = r"D:\database\bdd_dataset\bdd100k_labels_release\bdd100k\labels\bdd100k_labels_images_train.json"
-    
+
     # Create an instance of the BDDDataset.
-    dataset = BDDDataset(image_dir=image_directory,
-                         annotation_file=annotation_file,
-                         input_size=(720, 1280),
-                         max_objs=64)
-    
+    dataset = BDDDataset(
+        image_dir=image_directory,
+        annotation_file=annotation_file,
+        input_size=(720, 1280),
+        max_objs=64,
+    )
+
     # Create a DataLoader with the custom collate function.
     dataloader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
-    
+
     # Test one batch
     for batch_idx, (images, targets) in enumerate(dataloader):
         print(f"Batch {batch_idx}")
@@ -278,4 +307,3 @@ if __name__ == "__main__":
         print("  TC WH shape:", targets["tc"]["wh"].shape)
         print("  TP WH shape:", targets["tp"]["wh"].shape)
         break
-

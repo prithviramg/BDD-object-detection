@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
+
 class DenseNetBackbone(nn.Module):
     def __init__(self):
         super(DenseNetBackbone, self).__init__()
@@ -14,9 +15,10 @@ class DenseNetBackbone(nn.Module):
         features = []
         for name, layer in self.features._modules.items():
             x = layer(x)
-            if name in ["conv0", "denseblock1", "denseblock2", "denseblock3"]:
+            if name in ["denseblock1", "denseblock2", "denseblock3", "denseblock4"]:
                 features.append(x)
         return features
+
 
 class BiFPNLayer(nn.Module):
     def __init__(self, channels, epsilon=1e-4):
@@ -123,21 +125,25 @@ class CenterNetHead(nn.Module):
 
 
 class ObjectDetectionModel(nn.Module):
-    def __init__(self, tp_class = 8, tc_class = 2, bifpn_channels=256):
+    def __init__(self, tp_class=8, tc_class=2, bifpn_channels=256):
         super(ObjectDetectionModel, self).__init__()
         self.backbone = DenseNetBackbone()
 
         self.adapter_convs = nn.ModuleList(
             [
                 nn.Conv2d(in_channels, bifpn_channels, kernel_size=1)
-                for in_channels in [ 64, 256, 512, 1024]
+                for in_channels in [256, 512, 1024, 1024]
             ]
         )
 
         self.bifpn = BiFPN(bifpn_channels, num_layers=2)
 
-        self.tc_head = CenterNetHead(bifpn_channels, tc_class) # traffic control objects
-        self.tp_head = CenterNetHead(bifpn_channels, tp_class) # traffic participants objects
+        self.tc_head = CenterNetHead(
+            bifpn_channels, tc_class
+        )  # traffic control objects
+        self.tp_head = CenterNetHead(
+            bifpn_channels, tp_class
+        )  # traffic participants objects
 
     def forward(self, x):
 
@@ -146,11 +152,16 @@ class ObjectDetectionModel(nn.Module):
         for feat, conv in zip(feats, self.adapter_convs):
             feats_adapted.append(conv(feat))
         fused_feats = self.bifpn(feats_adapted)
-        traffic_control_objects, traffic_participant_objects = fused_feats[0], fused_feats[1]
+        traffic_control_objects, traffic_participant_objects = (
+            fused_feats[0],
+            fused_feats[1],
+        )
         tc_heatmap, tc_size, tc_offset = self.tc_head(traffic_control_objects)
         tp_heatmap, tp_size, tp_offset = self.tp_head(traffic_participant_objects)
-        return {"tc":{"heatmap": tc_heatmap, "size": tc_size, "offset": tc_offset},
-                "tp":{"heatmap": tp_heatmap, "size": tp_size, "offset": tp_offset}}
+        return {
+            "tc": {"heatmap": tc_heatmap, "size": tc_size, "offset": tc_offset},
+            "tp": {"heatmap": tp_heatmap, "size": tp_size, "offset": tp_offset},
+        }
 
 
 if __name__ == "__main__":
@@ -161,14 +172,14 @@ if __name__ == "__main__":
     tc_classes = 2
 
     model = ObjectDetectionModel(
-        tp_class = tp_classes, tc_class = tc_classes, bifpn_channels=256
+        tp_class=tp_classes, tc_class=tc_classes, bifpn_channels=256
     )
     outputs = model(dummy_input)
 
     print("Heatmap shape:", outputs["tc"]["heatmap"].shape)
     print("Size shape:", outputs["tc"]["size"].shape)
     print("Offset shape:", outputs["tc"]["offset"].shape)
-    print("-"*50)
+    print("-" * 50)
     print("Heatmap shape:", outputs["tp"]["heatmap"].shape)
     print("Size shape:", outputs["tp"]["size"].shape)
     print("Offset shape:", outputs["tp"]["offset"].shape)

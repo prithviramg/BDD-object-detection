@@ -12,6 +12,13 @@ from model import ObjectDetectionModel
 from loss import MultiScaleCenterNetLoss
 from dataset import BDDDataset, collate_fn
 
+# import logs
+import logging
+from log_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -59,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--gamma",
         type=float,
-        default=0.95,
+        default=0.99,
         help="Factor by which the learning rate will be reduced.",
     )
     # Validation and iteration parameters.
@@ -86,7 +93,7 @@ def parse_args():
 def evaluate(model, dataloader, device, loss_fn_tc, loss_fn_tp):
     model.eval()
     total_loss = 0.0
-    print("evaluating validation model")
+    logger.info("evaluating validation model")
     with torch.no_grad():
         for images, targets in tqdm.tqdm(dataloader):
             images = images.to(device)
@@ -107,7 +114,9 @@ def evaluate(model, dataloader, device, loss_fn_tc, loss_fn_tp):
 
             loss_tc = loss_fn_tc([outputs_tc], [targets_tc])
             loss_tp = loss_fn_tp([outputs_tp], [targets_tp])
-            loss = loss_tc + loss_tp
+            loss = (loss_tc[0] + loss_tc[1] + loss_tc[2]) * 0.6 + (
+                loss_tp[0] + loss_tp[1] + loss_tp[2]
+            ) * 0.4
 
             total_loss += loss.item()
     avg_loss = total_loss / len(dataloader)
@@ -116,14 +125,15 @@ def evaluate(model, dataloader, device, loss_fn_tc, loss_fn_tp):
 
 
 def main(args):
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device:", device)
+    logger.info("Using device:", device)
 
     # Create TensorBoard writer.
     writer = SummaryWriter(log_dir=args.log_dir)
 
     # Create dataset and perform train/val split.
-    print("loading train annotations. !!!")
+    logger.info("loading train annotations. !!!")
     train_dataset = BDDDataset(
         image_dir=args.data_dir,
         annotation_file=args.anno_file,
@@ -133,7 +143,7 @@ def main(args):
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn
     )
-    print("loading validation annotations. !!!")
+    logger.info("loading validation annotations. !!!")
     val_dataset = BDDDataset(
         image_dir=args.val_data_dir,
         annotation_file=args.val_anno_file,
@@ -148,7 +158,7 @@ def main(args):
     )
 
     # Initialize model, loss functions, optimizer, and scheduler.
-    model = ObjectDetectionModel(tp_class=8, tc_class=2, bifpn_channels=256)
+    model = ObjectDetectionModel(tp_class=8, tc_class=2, bifpn_channels=128)
     model = model.to(device)
 
     loss_fn_tc = MultiScaleCenterNetLoss(wh_weight=0.1, off_weight=1.0)
@@ -192,26 +202,38 @@ def main(args):
 
         loss_tc = loss_fn_tc([outputs_tc], [targets_tc])
         loss_tp = loss_fn_tp([outputs_tp], [targets_tp])
-        loss = loss_tc + loss_tp
+        loss = (loss_tc[0] + loss_tc[1] + loss_tc[2]) * 0.4 + (
+            loss_tp[0] + loss_tp[1] + loss_tp[2]
+        ) * 0.6
 
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=3.0)
         optimizer.step()
 
         # Log training loss and current learning rate to TensorBoard.
         current_lr = optimizer.param_groups[0]["lr"]
-        writer.add_scalar("Loss/train", loss.item(), iteration)
+        writer.add_scalar("Loss/train/total", loss.item(), iteration)
+        writer.add_scalar(
+            "Loss/train/heatmap", loss_tc[0].item() + loss_tp[0].item(), iteration
+        )
+        writer.add_scalar(
+            "Loss/train/wh", loss_tc[1].item() + loss_tp[1].item(), iteration
+        )
+        writer.add_scalar(
+            "Loss/train/offset", loss_tc[2].item() + loss_tp[2].item(), iteration
+        )
         writer.add_scalar("LearningRate", current_lr, iteration)
 
         # Print training progress every 10 iterations.
         if iteration % 10 == 0:
-            print(
-                f"Iteration [{iteration}/{args.max_iters}], Loss: {loss.item():.4f}, LR: {current_lr:.6f}"
+            logger.info(
+                f"Iteration [{iteration}/{args.max_iters}], TotalLoss: {loss.item():.4f}, heatmap_loss: {(loss_tc[0].item() + loss_tp[0].item()):.4f}, wh_loss: {(loss_tc[1].item() + loss_tp[1].item()):.4f}, offset_loss: {(loss_tc[2].item() + loss_tp[2].item()):.4f} , LR: {current_lr:.7f}"
             )
 
         # Run validation every 'val_freq' iterations.
         if iteration % args.val_freq == 0:
             val_loss = evaluate(model, val_loader, device, loss_fn_tc, loss_fn_tp)
-            print(f"*** Iteration [{iteration}] Validation Loss: {val_loss:.4f}")
+            logger.info(f"*** Iteration [{iteration}] Validation Loss: {val_loss:.4f}")
             writer.add_scalar("Loss/validation", val_loss, iteration)
 
             # Step the scheduler using the validation loss.
@@ -229,7 +251,7 @@ def main(args):
                 },
                 checkpoint_path,
             )
-            print(f"Saved checkpoint: {checkpoint_path}")
+            logger.info(f"Saved checkpoint: {checkpoint_path}")
 
     # Close the TensorBoard writer after training.
     writer.close()
