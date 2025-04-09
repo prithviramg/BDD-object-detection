@@ -123,9 +123,9 @@ Model performance is evaluated both quantitatively and qualitatively:
 - **Size Error:** Average difference in predicted vs actual bounding box dimensions.
 
 ![evaluation](samples/evaluation.png)
-![evaluation1](plots/F1_TimeOfDay.png)
-![evaluation2](plots/AR_TimeOfDay.png)
-![evaluation3](plots/AR_Weather.png)
+![evaluation1](results/plots/F1_TimeOfDay.png)
+![evaluation2](results/plots/AR_TimeOfDay.png)
+![evaluation3](results/plots/AR_Weather.png)
 
 ### Qualitative Metrics:
 - **Visual Inference Outputs:** Saved to `data/` with bounding boxes and class labels overlaid on input images.
